@@ -12,8 +12,16 @@ public class Main {
 
             if(input.equals("exit")) {
                 break;
-            }else if(input.startsWith("echo")) {
+            }else if(input.startsWith("echo ")) {
                 System.out.println(input.substring(5));
+            }else if(input.startsWith("type ")) {
+                String commandToCheck = input.substring(5);
+                
+                if (commandToCheck.equals("echo") || commandToCheck.equals("exit") || commandToCheck.equals("type")) {
+                    System.out.println(commandToCheck + " is a shell builtin");
+                } else {
+                    System.out.println(commandToCheck + ": not found");
+                }
             }else {
                 System.out.println(input + ": command not found");
             }
