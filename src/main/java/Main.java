@@ -24,13 +24,36 @@ public class Main {
             } else if (baseCommand.equals("echo")) {
                 System.out.println(input.substring(5));
             } else if (baseCommand.equals("pwd")) {
-                // Fetch and print the current working directory absolute path
                 System.out.println(System.getProperty("user.dir"));
+            } else if (baseCommand.equals("cd")) {
+                String targetPath = input.length() > 3 ? input.substring(3).trim() : "~";
+                
+                // Handle home directory shortcut '~'
+                if (targetPath.equals("~")) {
+                    targetPath = System.getenv("HOME");
+                }
+
+                File targetDir = new File(targetPath);
+                
+                // Resolve relative paths (like '..' or '.') against the current working directory
+                if (!targetDir.isAbsolute()) {
+                    targetDir = new File(System.getProperty("user.dir"), targetPath);
+                }
+
+                // Verify the directory exists before switching
+                if (targetDir.exists() && targetDir.isDirectory()) {
+                    // Update Java's user.dir property to successfully change location
+                    System.setProperty("user.dir", targetDir.getCanonicalPath());
+                } else {
+                    System.out.println("cd: " + targetPath + ": No such file or directory");
+                }
             } else if (baseCommand.equals("type")) {
                 String commandToCheck = commands[1];
                 
-                // Add "pwd" to the list of known shell builtins
-                if (commandToCheck.equals("echo") || commandToCheck.equals("exit") || commandToCheck.equals("type") || commandToCheck.equals("pwd")) {
+                // Add "cd" to the list of known shell builtins
+                if (commandToCheck.equals("echo") || commandToCheck.equals("exit") || 
+                    commandToCheck.equals("type") || commandToCheck.equals("pwd") || 
+                    commandToCheck.equals("cd")) {
                     System.out.println(commandToCheck + " is a shell builtin");
                 } else {
                     String path = getPath(commandToCheck);
@@ -50,6 +73,8 @@ public class Main {
                     }
 
                     ProcessBuilder pb = new ProcessBuilder(commandList);
+                    // CRITICAL: Ensure external programs run inside the updated directory location
+                    pb.directory(new File(System.getProperty("user.dir")));
                     pb.inheritIO(); 
                     Process process = pb.start();
                     process.waitFor(); 
