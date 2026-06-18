@@ -4,6 +4,9 @@ import java.util.List;
 import java.util.Scanner;
 
 public class Main {
+    // Keep track of the previous working directory globally
+    private static String oldWorkingDirectory = null;
+
     public static void main(String[] args) throws Exception {
         Scanner scanner = new Scanner(System.in);
 
@@ -27,30 +30,44 @@ public class Main {
                 System.out.println(System.getProperty("user.dir"));
             } else if (baseCommand.equals("cd")) {
                 String targetPath = input.length() > 3 ? input.substring(3).trim() : "~";
+                String currentDir = System.getProperty("user.dir");
                 
+                // Handle "cd -" to toggle back to the previous directory
+                if (targetPath.equals("-")) {
+                    if (oldWorkingDirectory == null) {
+                        // Standard shell behavior if OLDPWD isn't set yet
+                        System.out.println("cd: OLDPWD not set");
+                        continue;
+                    }
+                    targetPath = oldWorkingDirectory;
+                }
                 // Handle home directory shortcut '~'
-                if (targetPath.equals("~")) {
+                else if (targetPath.equals("~")) {
                     targetPath = System.getenv("HOME");
                 }
 
                 File targetDir = new File(targetPath);
-                
-                // Resolve relative paths (like '..' or '.') against the current working directory
                 if (!targetDir.isAbsolute()) {
-                    targetDir = new File(System.getProperty("user.dir"), targetPath);
+                    targetDir = new File(currentDir, targetPath);
                 }
 
-                // Verify the directory exists before switching
                 if (targetDir.exists() && targetDir.isDirectory()) {
-                    // Update Java's user.dir property to successfully change location
-                    System.setProperty("user.dir", targetDir.getCanonicalPath());
+                    String canonicalPath = targetDir.getCanonicalPath();
+                    
+                    // Track the previous directory before updating the environment
+                    oldWorkingDirectory = currentDir;
+                    System.setProperty("user.dir", canonicalPath);
+                    
+                    // Standard shells print the destination path when navigating via '-'
+                    if (input.substring(3).trim().equals("-")) {
+                        System.out.println(canonicalPath);
+                    }
                 } else {
                     System.out.println("cd: " + targetPath + ": No such file or directory");
                 }
             } else if (baseCommand.equals("type")) {
                 String commandToCheck = commands[1];
                 
-                // Add "cd" to the list of known shell builtins
                 if (commandToCheck.equals("echo") || commandToCheck.equals("exit") || 
                     commandToCheck.equals("type") || commandToCheck.equals("pwd") || 
                     commandToCheck.equals("cd")) {
@@ -73,7 +90,6 @@ public class Main {
                     }
 
                     ProcessBuilder pb = new ProcessBuilder(commandList);
-                    // CRITICAL: Ensure external programs run inside the updated directory location
                     pb.directory(new File(System.getProperty("user.dir")));
                     pb.inheritIO(); 
                     Process process = pb.start();
