@@ -20,7 +20,7 @@ public class Main {
                 continue;
             }
 
-            // --- UPGRADED TOKENIZER (SINGLE + DOUBLE QUOTES) ---
+            // --- ULTIMATE TOKENIZER (QUOTES + BACKSLASH ESCAPES) ---
             List<String> tokens = new ArrayList<>();
             StringBuilder currentToken = new StringBuilder();
             boolean inSingleQuote = false;
@@ -30,17 +30,48 @@ public class Main {
             for (int i = 0; i < input.length(); i++) {
                 char c = input.charAt(i);
 
-                // If it's a single quote and we are NOT inside double quotes, toggle it
-                if (c == '\'' && !inDoubleQuote) {
+                // 1. Handle Backslashes
+                if (c == '\\') {
+                    if (inSingleQuote) {
+                        // Inside single quotes, backslash is just a literal character
+                        currentToken.append(c);
+                        inToken = true;
+                    } else if (inDoubleQuote) {
+                        // Inside double quotes, it ONLY escapes ", \, and $
+                        if (i + 1 < input.length()) {
+                            char next = input.charAt(i + 1);
+                            if (next == '"' || next == '\\' || next == '$') {
+                                currentToken.append(next);
+                                i++; // Skip the next character since we just escaped it
+                            } else {
+                                currentToken.append(c); // Not a special char, keep the literal backslash
+                            }
+                        } else {
+                            currentToken.append(c);
+                        }
+                        inToken = true;
+                    } else {
+                        // Outside quotes, it cleanly escapes whatever the very next character is (like a space)
+                        if (i + 1 < input.length()) {
+                            currentToken.append(input.charAt(i + 1));
+                            i++; // Skip the escaped character
+                        } else {
+                            currentToken.append(c);
+                        }
+                        inToken = true;
+                    }
+                } 
+                // 2. Handle Single Quotes
+                else if (c == '\'' && !inDoubleQuote) {
                     inSingleQuote = !inSingleQuote;
                     inToken = true; 
                 } 
-                // If it's a double quote and we are NOT inside single quotes, toggle it
+                // 3. Handle Double Quotes
                 else if (c == '"' && !inSingleQuote) {
                     inDoubleQuote = !inDoubleQuote;
                     inToken = true;
                 } 
-                // If it's a space, and we are NOT in ANY quotes, finish the token
+                // 4. Handle Spaces (Token Separators)
                 else if (c == ' ' && !inSingleQuote && !inDoubleQuote) {
                     if (inToken) {
                         tokens.add(currentToken.toString());
@@ -48,14 +79,13 @@ public class Main {
                         inToken = false;
                     }
                 } 
-                // Otherwise, append the character literally
+                // 5. Normal Characters
                 else {
                     currentToken.append(c);
                     inToken = true;
                 }
             }
             
-            // Catch the very last token if the string ends without a trailing space
             if (inToken) {
                 tokens.add(currentToken.toString());
             }
