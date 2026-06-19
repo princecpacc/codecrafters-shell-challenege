@@ -4,7 +4,6 @@ import java.util.List;
 import java.util.Scanner;
 
 public class Main {
-    // Keep track of the previous working directory globally
     private static String oldWorkingDirectory = null;
 
     public static void main(String[] args) throws Exception {
@@ -14,35 +13,74 @@ public class Main {
             System.out.print("$ ");
             System.out.flush();
 
-            String input = scanner.nextLine().trim();
-            if (input.isEmpty()) {
+            if (!scanner.hasNextLine()) break;
+            
+            // Do NOT use .trim() here, let the tokenizer handle all spaces natively
+            String input = scanner.nextLine();
+            if (input.trim().isEmpty()) {
                 continue;
             }
 
-            String[] commands = input.split(" ");
-            String baseCommand = commands[0];
+            // --- REAL SHELL TOKENIZER (CHARACTER-BY-CHARACTER) ---
+            List<String> tokens = new ArrayList<>();
+            StringBuilder currentToken = new StringBuilder();
+            boolean inSingleQuote = false;
+            boolean inToken = false;
+
+            for (int i = 0; i < input.length(); i++) {
+                char c = input.charAt(i);
+
+                if (c == '\'') {
+                    // Toggle quote state. Quotes mean we are definitely inside a token.
+                    inSingleQuote = !inSingleQuote;
+                    inToken = true; 
+                } else if (c == ' ' && !inSingleQuote) {
+                    // A space OUTSIDE of quotes means the token is finished
+                    if (inToken) {
+                        tokens.add(currentToken.toString());
+                        currentToken.setLength(0); // Reset for the next token
+                        inToken = false;
+                    }
+                } else {
+                    // Normal characters (or spaces INSIDE quotes) get appended
+                    currentToken.append(c);
+                    inToken = true;
+                }
+            }
+            // Catch the very last token if the string ended without a trailing space
+            if (inToken) {
+                tokens.add(currentToken.toString());
+            }
+
+            if (tokens.isEmpty()) continue;
+
+            String baseCommand = tokens.get(0);
+            // -----------------------------------------------------
 
             if (baseCommand.equals("exit")) {
                 break;
             } else if (baseCommand.equals("echo")) {
-                System.out.println(input.substring(5));
+                StringBuilder echoOutput = new StringBuilder();
+                for (int i = 1; i < tokens.size(); i++) {
+                    echoOutput.append(tokens.get(i));
+                    if (i < tokens.size() - 1) {
+                        echoOutput.append(" ");
+                    }
+                }
+                System.out.println(echoOutput.toString());
             } else if (baseCommand.equals("pwd")) {
                 System.out.println(System.getProperty("user.dir"));
             } else if (baseCommand.equals("cd")) {
-                String targetPath = input.length() > 3 ? input.substring(3).trim() : "~";
+                String targetPath = tokens.size() > 1 ? tokens.get(1) : "~";
                 String currentDir = System.getProperty("user.dir");
                 
-                // Handle "cd -" to toggle back to the previous directory
                 if (targetPath.equals("-")) {
                     if (oldWorkingDirectory == null) {
-                        // Standard shell behavior if OLDPWD isn't set yet
                         System.out.println("cd: OLDPWD not set");
                         continue;
                     }
                     targetPath = oldWorkingDirectory;
-                }
-                // Handle home directory shortcut '~'
-                else if (targetPath.equals("~")) {
+                } else if (targetPath.equals("~")) {
                     targetPath = System.getenv("HOME");
                 }
 
@@ -53,20 +91,20 @@ public class Main {
 
                 if (targetDir.exists() && targetDir.isDirectory()) {
                     String canonicalPath = targetDir.getCanonicalPath();
-                    
-                    // Track the previous directory before updating the environment
                     oldWorkingDirectory = currentDir;
                     System.setProperty("user.dir", canonicalPath);
-                    
-                    // Standard shells print the destination path when navigating via '-'
-                    if (input.substring(3).trim().equals("-")) {
+                    if (tokens.size() > 1 && tokens.get(1).equals("-")) {
                         System.out.println(canonicalPath);
                     }
                 } else {
                     System.out.println("cd: " + targetPath + ": No such file or directory");
                 }
             } else if (baseCommand.equals("type")) {
-                String commandToCheck = commands[1];
+                if (tokens.size() < 2) {
+                    System.out.println("type: missing operand");
+                    continue;
+                }
+                String commandToCheck = tokens.get(1);
                 
                 if (commandToCheck.equals("echo") || commandToCheck.equals("exit") || 
                     commandToCheck.equals("type") || commandToCheck.equals("pwd") || 
@@ -84,18 +122,13 @@ public class Main {
                 String executablePath = getPath(baseCommand);
                 
                 if (executablePath != null) {
-                    List<String> commandList = new ArrayList<>();
-                    for (String arg : commands) {
-                        commandList.add(arg);
-                    }
-
-                    ProcessBuilder pb = new ProcessBuilder(commandList);
+                    ProcessBuilder pb = new ProcessBuilder(tokens);
                     pb.directory(new File(System.getProperty("user.dir")));
                     pb.inheritIO(); 
                     Process process = pb.start();
                     process.waitFor(); 
                 } else {
-                    System.out.println(input + ": not found");
+                    System.out.println(baseCommand + ": command not found");
                 }
             }
         }
