@@ -15,39 +15,47 @@ public class Main {
 
             if (!scanner.hasNextLine()) break;
             
-            // Do NOT use .trim() here, let the tokenizer handle all spaces natively
             String input = scanner.nextLine();
             if (input.trim().isEmpty()) {
                 continue;
             }
 
-            // --- REAL SHELL TOKENIZER (CHARACTER-BY-CHARACTER) ---
+            // --- UPGRADED TOKENIZER (SINGLE + DOUBLE QUOTES) ---
             List<String> tokens = new ArrayList<>();
             StringBuilder currentToken = new StringBuilder();
             boolean inSingleQuote = false;
+            boolean inDoubleQuote = false;
             boolean inToken = false;
 
             for (int i = 0; i < input.length(); i++) {
                 char c = input.charAt(i);
 
-                if (c == '\'') {
-                    // Toggle quote state. Quotes mean we are definitely inside a token.
+                // If it's a single quote and we are NOT inside double quotes, toggle it
+                if (c == '\'' && !inDoubleQuote) {
                     inSingleQuote = !inSingleQuote;
                     inToken = true; 
-                } else if (c == ' ' && !inSingleQuote) {
-                    // A space OUTSIDE of quotes means the token is finished
+                } 
+                // If it's a double quote and we are NOT inside single quotes, toggle it
+                else if (c == '"' && !inSingleQuote) {
+                    inDoubleQuote = !inDoubleQuote;
+                    inToken = true;
+                } 
+                // If it's a space, and we are NOT in ANY quotes, finish the token
+                else if (c == ' ' && !inSingleQuote && !inDoubleQuote) {
                     if (inToken) {
                         tokens.add(currentToken.toString());
-                        currentToken.setLength(0); // Reset for the next token
+                        currentToken.setLength(0); 
                         inToken = false;
                     }
-                } else {
-                    // Normal characters (or spaces INSIDE quotes) get appended
+                } 
+                // Otherwise, append the character literally
+                else {
                     currentToken.append(c);
                     inToken = true;
                 }
             }
-            // Catch the very last token if the string ended without a trailing space
+            
+            // Catch the very last token if the string ends without a trailing space
             if (inToken) {
                 tokens.add(currentToken.toString());
             }
