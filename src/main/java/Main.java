@@ -122,6 +122,30 @@ public class Main {
             if (commandArgs.isEmpty()) continue;
             String baseCommand = commandArgs.get(0);
             // ---------------------------------------------------------------
+            try {
+                if (stdoutFile != null) {
+                    File outFile = java.nio.file.Path.of(System.getProperty("user.dir")).resolve(stdoutFile).toFile();
+                    if (outFile.getParentFile() != null) outFile.getParentFile().mkdirs();
+                    if (!stdoutAppend) {
+                        outFile.delete();
+                    }
+                    if (!outFile.exists()) {
+                        outFile.createNewFile();
+                    }
+                }
+                if (stderrFile != null) {
+                    File errFile = java.nio.file.Path.of(System.getProperty("user.dir")).resolve(stderrFile).toFile();
+                    if (errFile.getParentFile() != null) errFile.getParentFile().mkdirs();
+                    if (!stderrAppend) {
+                        errFile.delete();
+                    }
+                    if (!errFile.exists()) {
+                        errFile.createNewFile();
+                    }
+                }
+            } catch (Exception e) {
+                // ignore
+            }
 
             if (baseCommand.equals("exit")) {
                 break;
