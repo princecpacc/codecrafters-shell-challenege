@@ -333,7 +333,7 @@ public class Main {
         } else if (baseCommand.equals("jobs")) {
             for (Job job : backgroundJobs) {
                 String state = job.isDone() ? "Done" : "Running";
-                String out = String.format("[%d] %s %s", job.id, state, job.commandString);
+                String out = String.format("[%d]+  %s                 %s", job.id, state, job.commandString);
                 writeOutput(finalStdoutFile, finalStdoutAppend, out);
             }
         } else if (baseCommand.equals("type")) {
