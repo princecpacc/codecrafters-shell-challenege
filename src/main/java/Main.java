@@ -9,6 +9,29 @@ import java.util.Scanner;
 public class Main {
     private static String oldWorkingDirectory = null;
 
+    static class Job {
+        int id;
+        List<Process> processes;
+        String commandString;
+        
+        Job(int id, List<Process> processes, String commandString) {
+            this.id = id;
+            this.processes = processes;
+            this.commandString = commandString;
+        }
+
+        boolean isDone() {
+            if (processes == null || processes.isEmpty()) return true;
+            for (Process p : processes) {
+                if (p.isAlive()) return false;
+            }
+            return true;
+        }
+    }
+
+    private static List<Job> backgroundJobs = new ArrayList<>();
+    private static int nextJobId = 1;
+
     public static void main(String[] args) throws Exception {
         Scanner scanner = new Scanner(System.in);
 
@@ -19,7 +42,8 @@ public class Main {
             if (!scanner.hasNextLine()) break;
             
             String input = scanner.nextLine();
-            if (input.trim().isEmpty()) {
+            String originalCommand = input.trim();
+            if (originalCommand.isEmpty()) {
                 continue;
             }
 
@@ -80,6 +104,12 @@ public class Main {
                 tokens.add(currentToken.toString());
             }
 
+            boolean background = false;
+            if (!tokens.isEmpty() && tokens.get(tokens.size() - 1).equals("&")) {
+                background = true;
+                tokens.remove(tokens.size() - 1);
+            }
+
             if (tokens.isEmpty()) continue;
 
             // --- PIPELINE SPLITTING ---
@@ -95,14 +125,20 @@ public class Main {
             }
             pipelines.add(currentPipeline);
 
-            executePipelines(pipelines);
+            List<Process> procs = executePipelines(pipelines, background);
+            if (background && !procs.isEmpty()) {
+                Job job = new Job(nextJobId++, procs, originalCommand);
+                backgroundJobs.add(job);
+                System.out.printf("[%d] %d\n", job.id, procs.get(procs.size()-1).pid());
+            }
         }
     }
 
-    private static void executePipelines(List<List<String>> pipelines) throws Exception {
+    private static List<Process> executePipelines(List<List<String>> pipelines, boolean background) throws Exception {
         List<ProcessBuilder> pbs = new ArrayList<>();
         File lastOutput = null;
         List<File> tempFiles = new ArrayList<>();
+        List<Process> allProcesses = new ArrayList<>();
 
         for (int i = 0; i < pipelines.size(); i++) {
             List<String> cmd = pipelines.get(i);
@@ -111,7 +147,7 @@ public class Main {
             String baseCommand = cmd.get(0);
             boolean isBuiltin = baseCommand.equals("echo") || baseCommand.equals("pwd") || 
                                 baseCommand.equals("cd") || baseCommand.equals("type") || 
-                                baseCommand.equals("exit");
+                                baseCommand.equals("exit") || baseCommand.equals("jobs");
 
             if (isBuiltin) {
                 // Flush accumulated external commands
@@ -121,7 +157,7 @@ public class Main {
                         currentOutput = File.createTempFile("pipe", ".tmp");
                         tempFiles.add(currentOutput);
                     }
-                    flushPbs(pbs, lastOutput, currentOutput);
+                    allProcesses.addAll(flushPbs(pbs, lastOutput, currentOutput, !background));
                     lastOutput = currentOutput;
                 }
 
@@ -139,7 +175,7 @@ public class Main {
                 if (pb == null) {
                     // Command not found
                     if (!pbs.isEmpty()) {
-                        flushPbs(pbs, lastOutput, null);
+                        allProcesses.addAll(flushPbs(pbs, lastOutput, null, !background));
                     }
                     System.out.println(baseCommand + ": not found");
                     lastOutput = null;
@@ -151,16 +187,20 @@ public class Main {
         }
 
         if (!pbs.isEmpty()) {
-            flushPbs(pbs, lastOutput, null);
+            allProcesses.addAll(flushPbs(pbs, lastOutput, null, !background));
         }
 
-        for (File f : tempFiles) {
-            f.delete();
+        if (!background) {
+            for (File f : tempFiles) {
+                f.delete();
+            }
         }
+
+        return allProcesses;
     }
 
-    private static void flushPbs(List<ProcessBuilder> pbs, File lastOutput, File currentOutput) throws Exception {
-        if (pbs.isEmpty()) return;
+    private static List<Process> flushPbs(List<ProcessBuilder> pbs, File lastOutput, File currentOutput, boolean wait) throws Exception {
+        if (pbs.isEmpty()) return new ArrayList<>();
         ProcessBuilder first = pbs.get(0);
         if (first.redirectInput() == ProcessBuilder.Redirect.PIPE) {
             if (lastOutput != null) {
@@ -180,8 +220,11 @@ public class Main {
         }
         
         List<Process> processes = ProcessBuilder.startPipeline(pbs);
-        processes.get(processes.size() - 1).waitFor();
+        if (wait) {
+            processes.get(processes.size() - 1).waitFor();
+        }
         pbs.clear();
+        return processes;
     }
 
     private static void executeBuiltin(List<String> tokens, File pipeOut) throws Exception {
@@ -287,6 +330,12 @@ public class Main {
             } else {
                 System.out.println("cd: " + targetPath + ": No such file or directory");
             }
+        } else if (baseCommand.equals("jobs")) {
+            for (Job job : backgroundJobs) {
+                String state = job.isDone() ? "Done" : "Running";
+                String out = String.format("[%d] %s %s", job.id, state, job.commandString);
+                writeOutput(finalStdoutFile, finalStdoutAppend, out);
+            }
         } else if (baseCommand.equals("type")) {
             if (commandArgs.size() < 2) {
                 System.out.println("type: missing operand");
@@ -297,7 +346,7 @@ public class Main {
             
             if (commandToCheck.equals("echo") || commandToCheck.equals("exit") || 
                 commandToCheck.equals("type") || commandToCheck.equals("pwd") || 
-                commandToCheck.equals("cd")) {
+                commandToCheck.equals("cd") || commandToCheck.equals("jobs")) {
                 result = commandToCheck + " is a shell builtin";
             } else {
                 String path = getPath(commandToCheck);
